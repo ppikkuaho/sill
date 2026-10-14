@@ -407,6 +407,13 @@ this draft, the description's keyboard bullet, README's How it works and the sup
 words only once Noah's device steps 1 and 9 pass. docs/hardware-keyboard-plan.md, "Words that wait for a
 device", has each line as it would read then.
 
+For the next version, with whatever else it brings (issue #69, a device change: it
+needs no new Sill for Mac):
+
+```text
+Fixed: after Sill sat in the background for hours, it could stop finding your Mac until you closed and reopened it. Sill now looks again when you come back, keeps trying for a few minutes while your Mac doesn’t answer (when it’s asleep, say), and connects when it does.
+```
+
 ## 6. Export compliance (encryption)
 
 **The key is in the app.** `iOSClient/Info.plist` sets
