@@ -87,6 +87,7 @@ private struct DuoPostureReader: ViewModifier {
     @State private var hinge: DuoPosture.Hinge = .unknown
 
     func body(content: Content) -> some View {
+        #if canImport(SwiftUI, _version: 8.0.85)
         if #available(iOS 27.1, *) {
             content
                 .environment(\.duoEnvironment, DuoEnvironment(hinge: hinge))
@@ -101,9 +102,15 @@ private struct DuoPostureReader: ViewModifier {
         } else {
             content
         }
+        #else
+        content
+        #endif
     }
 }
 
+// The iOS 27.1 SDK's hinge APIs, compiled only where the SDK has them: Xcode 27.0's SwiftUI is
+// 8.0.84.1.104 and has none, so a build with it reads no hinge (DuoPosture `unknown`, as before iOS 27.1).
+#if canImport(SwiftUI, _version: 8.0.85)
 @available(iOS 27.1, *)
 extension DuoPosture.Hinge {
     init(_ context: DeviceHingeContext) {
@@ -118,6 +125,7 @@ extension DuoPosture.Hinge {
         }
     }
 }
+#endif
 
 extension DuoPosture {
     /// The posture as the view `geo` measures sees it: the hinge from the environment (before its
@@ -132,12 +140,14 @@ extension DuoPosture {
             let origin = geo.frame(in: .named(displaySpace)).origin
             return DuoPosture(hinge: environment.hinge, fold: fold?.offsetBy(dx: -origin.x, dy: -origin.y))
         case .reservedRegions:
+            #if canImport(SwiftUI, _version: 8.0.85)
             if #available(iOS 27.1, *) {
                 let region = geo.reservedRegions(kind: .division, options: .includeInactive).first
                 let hinge = hinge(reported: environment.hinge, regionActive: region?.isActive)
                 guard hinge != .unknown else { return .unknown }
                 return DuoPosture(hinge: hinge, fold: region?.frame)
             }
+            #endif
             return .unknown
         }
     }
