@@ -4,7 +4,7 @@ import Foundation
 public enum StreamSource: Codable, Hashable {
     case none
     case window(UInt32)   // CGWindowID, stable for the life of the window
-    case desktop          // the Mac's main display
+    case desktop          // one of the Mac's displays: its main one, or the one a device picked (kind 40)
 }
 
 /// One on-screen Mac window, as the client sees it. WindowList order is stable: first seen first.
@@ -53,12 +53,42 @@ public struct WindowList: Codable {
     /// 2026-09-27, to which a device sends no kind 28. A later generation of gestures says 2 and
     /// goes only to a host that says so.
     public var gestures: Int?
+    /// The host's own displays (never Sill's virtual one), for a device that picks which the Desktop
+    /// shows (kind 40); nil from a host before 2026-10-15, whose Desktop is its main display, and to
+    /// which a device sends no kind 40.
+    public var displays: [DisplayInfo]?
+    /// The one the Desktop shows now, or would show if picked: a device's pick (kind 40) while it is
+    /// connected, else the main display.
+    public var desktopDisplay: UInt32?
 
     public init(macName: String, windows: [WindowInfo], active: StreamSource, launchID: String? = nil,
-                hostVersion: String? = nil, protocol: Int? = nil, gestures: Int? = nil) {
+                hostVersion: String? = nil, protocol: Int? = nil, gestures: Int? = nil,
+                displays: [DisplayInfo]? = nil, desktopDisplay: UInt32? = nil) {
         self.macName = macName; self.windows = windows; self.active = active; self.launchID = launchID
         self.hostVersion = hostVersion; self.protocol = `protocol`; self.gestures = gestures
+        self.displays = displays; self.desktopDisplay = desktopDisplay
     }
+}
+
+/// One of the host's own displays, as a device lists it to pick the Desktop (kind 40). `id` is its
+/// CGDirectDisplayID, `name` NSScreen's ("DELL U4025QW", "Built-in Retina Display"), the size in
+/// points.
+public struct DisplayInfo: Codable, Hashable, Sendable {
+    public var id: UInt32
+    public var name: String
+    public var width: Double
+    public var height: Double
+    public var main: Bool?
+    public init(id: UInt32, name: String, width: Double, height: Double, main: Bool? = nil) {
+        self.id = id; self.name = name; self.width = width; self.height = height; self.main = main
+    }
+}
+
+/// Device → host: which of the host's displays the Desktop shows for this device (kind 40), sent
+/// before each of its Desktop picks; only to a host whose list names its `displays`.
+public struct PickDisplay: Codable, Hashable, Sendable {
+    public var display: UInt32
+    public init(display: UInt32) { self.display = display }
 }
 
 public struct LaunchApp: Codable {

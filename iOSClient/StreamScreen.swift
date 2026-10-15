@@ -1114,6 +1114,7 @@ private struct TopBar: View {
             button(open: client.active == .desktop, symbol: "desktopcomputer", label: "Desktop",
                    accessibilityLabel: "Show the full Mac desktop",
                    action: { client.select(.desktop) })
+                .modifier(DesktopDisplayMenu(client: client))
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
 
@@ -1167,6 +1168,32 @@ enum Spotlight {
 /// A bar button: 66×66 in the roomy top bar, 64×58 in the compact one and the portrait window bar,
 /// 56×50 with a 14 pt radius in the outer display's portrait bar, and 50 pt tall with its share of
 /// the row's width in a phone's row 1.
+/// The Desktop button's long press: the Mac's displays by name, the one its Desktop shows marked;
+/// picking one shows the Desktop there and is remembered for that Mac (StreamClient's
+/// `pickDesktopDisplay`). Only for a Mac that lists more than one display; a tap stays the
+/// button's own.
+struct DesktopDisplayMenu: ViewModifier {
+    @ObservedObject var client: StreamClient
+
+    func body(content: Content) -> some View {
+        if client.hostDisplays.count > 1 {
+            content.contextMenu {
+                ForEach(client.hostDisplays, id: \.id) { display in
+                    Button { client.pickDesktopDisplay(display.id) } label: {
+                        if display.id == client.desktopDisplay {
+                            Label(display.name, systemImage: "checkmark")
+                        } else {
+                            Text(display.name)
+                        }
+                    }
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 struct BarButton<Content: View>: View {
     let open: Bool
     let width: CGFloat
