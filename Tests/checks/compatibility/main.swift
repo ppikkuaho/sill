@@ -168,6 +168,42 @@ let gestureMessage = StreamMessage(kind: .gesture, timestamp: 1, isKeyframe: fal
 check(StreamMessage.parseHeader(gestureMessage)?.kind == .gesture, "the gesture's header parses")
 check(gestureMessage.count == StreamMessage.headerLength + Wire.encode(gesture).count, "one header, then the JSON")
 
+// Kind 40, the Desktop's display, and the window list's `displays` and `desktopDisplay`: additive
+// both ways. A device sends kind 40 only to a host whose list names its displays.
+let dell = DisplayInfo(id: 3, name: "DELL U4025QW", width: 3360, height: 1418, main: true)
+let builtIn = DisplayInfo(id: 1, name: "Built-in Retina Display", width: 1728, height: 1117)
+check(json(dell) == #"{"height":1418,"id":3,"main":true,"name":"DELL U4025QW","width":3360}"#, "a display's keys: \(json(dell))")
+check(json(builtIn) == #"{"height":1117,"id":1,"name":"Built-in Retina Display","width":1728}"#, "not the main display: `main` left out: \(json(builtIn))")
+check(Wire.decode(DisplayInfo.self, from: Data(#"{"id":7,"name":"OpenDisplay — iPhone","width":440,"height":956,"scale":3}"#.utf8))
+      == DisplayInfo(id: 7, name: "OpenDisplay — iPhone", width: 440, height: 956), "a display: unknown keys are skipped")
+check(Wire.decode(DisplayInfo.self, from: Data(#"{"id":7,"width":440,"height":956}"#.utf8)) == nil, "a display without a name does not decode")
+let pick = PickDisplay(display: 3)
+check(json(pick) == #"{"display":3}"#, "kind 40's payload: \(json(pick))")
+check(Wire.decode(PickDisplay.self, from: Data(#"{"display":4294967295}"#.utf8))?.display == 0xFFFF_FFFF, "the largest display ID decodes")
+check(Wire.decode(PickDisplay.self, from: Data(#"{"display":-1}"#.utf8)) == nil, "a negative display does not decode")
+check(Wire.decode(PickDisplay.self, from: Data(#"{}"#.utf8)) == nil, "no display: no pick")
+check(StreamMessageKind.pickDisplay.rawValue == 40 && StreamMessageKind(rawValue: 40) == .pickDisplay, "kind 40 is pickDisplay, as PR #66 numbers it")
+check((29...39).allSatisfy { StreamMessageKind(rawValue: $0) == nil }, "29–39 are not this build's")
+let pickMessage = StreamMessage(kind: .pickDisplay, timestamp: 1, isKeyframe: false, payload: Wire.encode(pick)).serialized()
+check(StreamMessage.parseHeader(pickMessage)?.kind == .pickDisplay, "kind 40's header parses")
+check(json(StreamSource.desktop) == #"{"desktop":{}}"#, "the Desktop's pick (kind 6) is as it was: \(json(StreamSource.desktop))")
+let picks = WindowList(macName: "Mac mini", windows: [], active: .desktop, launchID: "L", hostVersion: "0.5.1", protocol: 1,
+                       gestures: TrackpadGesture.generation, displays: [builtIn, dell], desktopDisplay: 3)
+check(json(picks).contains(#""displays":[{"height":1117,"id":1,"#) && json(picks).contains(#""desktopDisplay":3"#),
+      "a list from a host that takes kind 40 names its displays and the Desktop's: \(json(picks))")
+check(!json(takes).contains("displays") && !json(takes).contains("desktopDisplay"), "a list without them leaves both keys out: \(json(takes))")
+check(decodedOld != nil && decodedOld?.displays == nil && decodedOld?.desktopDisplay == nil, "an older host's list decodes, displays and desktopDisplay nil")
+let roundTrip = Wire.decode(WindowList.self, from: Wire.encode(picks))
+check(roundTrip?.displays == [builtIn, dell] && roundTrip?.desktopDisplay == 3, "displays and desktopDisplay round-trip")
+// The window list as main's StreamProtocol (985a733) decodes it: an older device reads the new list.
+struct OlderWindowList: Decodable {
+    var macName: String; var windows: [WindowInfo]; var active: StreamSource; var launchID: String?
+    var hostVersion: String?; var `protocol`: Int?; var gestures: Int?
+}
+let older = Wire.decode(OlderWindowList.self, from: Wire.encode(picks))
+check(older?.macName == "Mac mini" && older?.active == .desktop && older?.gestures == 1 && older?.hostVersion == "0.5.1",
+      "an older device's decoder reads a list with displays")
+
 // For H4: what cb0ec55's StreamProtocol must read.
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : nil
 if let out {

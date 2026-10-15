@@ -732,6 +732,13 @@ final class StreamClient: ObservableObject {
     /// six, nil from a Mac before 2026-09-27, which is sent none (`sendGesture`). Cleared with the
     /// session.
     @Published var hostGestures: Int?
+    /// The Mac's own displays (`WindowList.displays`), for the Desktop button's long press, and the
+    /// one its Desktop shows (`desktopDisplay`); empty and nil from a Mac before kind 40, which is
+    /// sent none. Cleared with the session.
+    @Published var hostDisplays: [DisplayInfo] = []
+    @Published var desktopDisplay: UInt32?
+    /// Which display this device's Desktop shows on each Mac, picked here (DesktopDisplayMemory).
+    private let displayMemory = DesktopDisplayMemory(defaults: .standard)
     /// This device's path (status, interfaces, cost), for "did it leave home since the loss".
     var pathSignature = ""
     var pathMonitor: NWPathMonitor?
@@ -2863,6 +2870,8 @@ final class StreamClient: ObservableObject {
         hostVersion = nil
         hostProtocol = nil
         hostGestures = nil
+        hostDisplays = []
+        desktopDisplay = nil
         remoteRoute = nil
         macInfo = nil
         macInfoSaved = false
@@ -2926,11 +2935,27 @@ final class StreamClient: ObservableObject {
     /// is not the person's doing.
     private func request(_ source: StreamSource) {
         choicesSent += 1
+        // The Desktop on this device's display for this Mac, named just before (kind 40), to a Mac
+        // that lists its displays: the main one until one is picked here.
+        let display = source == .desktop ? displayMemory.wanted(for: macName, listed: hostDisplays) : nil
+        if let display { send(.pickDisplay, Wire.encode(PickDisplay(display: display))) }
         send(.selectSource, Wire.encode(source))
         #if DEBUG
         // Layout harness (mock, no connection): show the pick locally so taps can be checked.
-        if connection == nil { DispatchQueue.main.async { self.active = source } }
+        if connection == nil {
+            DispatchQueue.main.async {
+                self.active = source
+                if let display { self.desktopDisplay = display }
+            }
+        }
         #endif
+    }
+
+    /// The Desktop button's long press: the Desktop on this display, remembered for this Mac.
+    func pickDesktopDisplay(_ id: UInt32) {
+        guard hostDisplays.contains(where: { $0.id == id }) else { return }
+        displayMemory.remember(id, for: macName)
+        select(.desktop)
     }
 
     /// The bar's long-press menu: close, minimize or full-screen a window on the Mac.
@@ -3367,6 +3392,8 @@ final class StreamClient: ObservableObject {
                 if self.hostVersion != list.hostVersion { self.hostVersion = list.hostVersion }
                 if self.hostProtocol != list.protocol { self.hostProtocol = list.protocol }
                 if self.hostGestures != list.gestures { self.hostGestures = list.gestures }
+                if self.hostDisplays != list.displays ?? [] { self.hostDisplays = list.displays ?? [] }
+                if self.desktopDisplay != list.desktopDisplay { self.desktopDisplay = list.desktopDisplay }
                 if !self.sessionListed {
                     self.sessionListed = true
                     #if DEBUG

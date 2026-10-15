@@ -78,10 +78,16 @@ final class WindowCatalog {
     /// because its contents are the ones changing. Nil is fine: it is then treated like any other.
     var activeWindowID: UInt32?
 
-    /// `--virtual-display`: the Desktop source must capture the Mac's real main display, never the
-    /// virtual one. `SCShareableContent.displays` order is not guaranteed once a second display
-    /// exists, so pick by ID. Off by default: the default path keeps `displays.first`.
-    var preferMainDisplay = false
+    /// The display a device picked for the Desktop (kind 40, the coordinator's `showDesktop`); nil,
+    /// or no longer listed, the main display (DesktopDisplays). Never one of Sill's virtual displays.
+    private(set) var desktopPick: CGDirectDisplayID?
+    /// This Mac's own displays as a device lists them (DesktopDisplays.listed), from the last look.
+    private(set) var displayInfos: [DisplayInfo] = []
+    /// Every display ScreenCaptureKit listed at the last look, Sill's own among them.
+    private var allDisplays: [SCDisplay] = []
+    /// Fires when `displayInfos` changes (a display came or went, was renamed or resized, or another
+    /// became the main one), and when the Desktop's display fell back to the main one.
+    var onDisplaysChanged: (@MainActor () -> Void)?
 
     /// `--virtual-display`: the window the coordinator has moved onto the virtual display. Set right
     /// after a successful placement, cleared on release. If ScreenCaptureKit stops treating it as
@@ -242,9 +248,18 @@ final class WindowCatalog {
         guard seq > appliedSeq else { return }      // a newer refresh already landed; don't go backwards
         appliedSeq = seq
         ownApplication = content.applications.first { $0.processID == Self.ownPID }
-        display = preferMainDisplay
-            ? (content.displays.first { $0.displayID == CGMainDisplayID() } ?? content.displays.first)
-            : content.displays.first
+        allDisplays = content.displays
+        let main = CGMainDisplayID()
+        let listed = DesktopDisplays.listed(content.displays.map { d in
+            DesktopDisplays.Screen(id: d.displayID, name: Self.name(of: d.displayID), width: d.frame.width, height: d.frame.height,
+                                   sills: StreamCoordinator.isSillVirtualDisplay(d.displayID))
+        }, main: main)
+        let kept = DesktopDisplays.kept(desktopPick, listed: listed)
+        let displaysChanged = listed != displayInfos || kept != desktopPick
+        if kept != desktopPick, let gone = desktopPick { print("Desktop: display \(gone) is gone; the Desktop shows the main display") }
+        displayInfos = listed
+        desktopPick = kept
+        showPickedDisplay()
         var visible = content.windows.filter { w in
             guard let app = w.owningApplication, !app.applicationName.isEmpty else { return false }
             return w.windowLayer == 0                                  // drops widgets, wallpaper, backstop
@@ -272,6 +287,30 @@ final class WindowCatalog {
             infos = newInfos
             onWindowsChanged?(newInfos)
         }
+        if displaysChanged { onDisplaysChanged?() }
+    }
+
+    /// The Desktop shows `id` from now on (nil: the main display), or the main display when `id` is
+    /// not listed. At once: the next look keeps it while it is listed.
+    func showDesktop(on id: CGDirectDisplayID?) {
+        desktopPick = DesktopDisplays.kept(id, listed: displayInfos)
+        showPickedDisplay()
+    }
+
+    /// `display` from the pick and the last look. Sill's virtual display only when nothing else is
+    /// listed (a Mac with no screen of its own), as the first display listed always was.
+    private func showPickedDisplay() {
+        let id = DesktopDisplays.shown(picked: desktopPick, listed: displayInfos)
+        display = allDisplays.first { $0.displayID == id } ?? allDisplays.first
+    }
+
+    /// NSScreen's name for a display ("DELL U4025QW", "Built-in Retina Display"; two of one model get
+    /// "(1)" and "(2)" from macOS).
+    private static func name(of id: CGDirectDisplayID) -> String {
+        let screen = NSScreen.screens.first {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == id
+        }
+        return screen?.localizedName ?? "Display \(id)"
     }
 
     /// Thumbnail cadence, per window: every pass (2 s) if its `WindowInfo` changed since its last

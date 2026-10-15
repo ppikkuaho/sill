@@ -67,6 +67,11 @@ public enum StreamMessageKind: UInt8 {
     case gesture = 28        // device → host: JSON TrackpadGesture — a three- or four-finger gesture the device
                              // recognized, which the Mac turns into its own shortcut (Mission Control, a Space,
                              // Apps…). Only to a host whose window list says `gestures` 1 or more
+    // The Desktop's display (Switcher.swift). 40, as PR #66 (Sill Viewer) numbers the same message; 29–39
+    // are that pull request's too. Older hosts map it to `.unknown` and skip it.
+    case pickDisplay = 40    // device → host: JSON PickDisplay — which of the host's own displays the Desktop shows
+                             // for this device; before each of its Desktop picks, and only to a host whose window
+                             // list names its `displays`
     case unknown = 255       // never sent: what parseHeader yields for a kind this build does not know
 }
 
