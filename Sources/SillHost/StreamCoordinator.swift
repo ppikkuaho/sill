@@ -161,6 +161,9 @@ package final class StreamCoordinator {
     /// before each of its Desktop picks. A connection without one (an older device) gets the main
     /// display.
     private var desktopPicks: [ObjectIdentifier: CGDirectDisplayID] = [:]
+    /// The display of a Desktop whose capture stopped under it, until a look at the displays says
+    /// whether it went (`displaysChanged`) or another select runs.
+    private var stoppedDesktop: CGDirectDisplayID?
     private var pendingLaunch: String?
     private var switching = false
     /// A restart of the active source is in flight (a settings change, a resize, a rate change,
@@ -1211,6 +1214,7 @@ package final class StreamCoordinator {
     func select(_ source: StreamSource, bringForward: Bool = false) async {
         guard !switching, !shuttingDown else { return }
         switching = true
+        stoppedDesktop = nil
         restartOf = (source == active && source != .none) ? source : nil
         defer {
             switching = false
@@ -2187,15 +2191,14 @@ package final class StreamCoordinator {
         broadcastList()
     }
 
-    /// The capture stopped under the stream: nothing streams, but a Desktop whose display went
-    /// (unplugged, another app's virtual display removed) comes back on the main display. A fresh
-    /// look forgets the pick of a display that is no longer listed.
+    /// The capture stopped under the stream: nothing streams. A Desktop's display is remembered
+    /// until the catalog's next look: one that went (unplugged, another app's virtual display
+    /// removed) brings the Desktop back on the main display (`displaysChanged`). ScreenCaptureKit
+    /// stops such a capture while the display can still be listed for a few seconds.
     private func captureStopped() async {
-        if active == .desktop, let gone = streamedDisplay, CGDisplayIsOnline(gone) == 0 {
-            await catalog.refreshWindows()
-            if let shown = catalog.display?.displayID, shown != gone { await select(.desktop); return }
-        }
+        let display = active == .desktop ? streamedDisplay : nil
         await select(.none)
+        if active == .none { stoppedDesktop = display }
     }
 
     /// The catalog's displays changed (one came or went, the picked one fell back to the main
@@ -2204,6 +2207,12 @@ package final class StreamCoordinator {
     private func displaysChanged() async {
         broadcastList()
         pointer.setGeometry(pointerGeometry(), fps: fps)
+        if let gone = stoppedDesktop, active == .none, !catalog.displayInfos.contains(where: { $0.id == gone }) {
+            stoppedDesktop = nil
+            print("Desktop: its display (\(gone)) went; the Desktop shows the main display")
+            await select(.desktop)
+            return
+        }
         await followDesktopDisplay()
     }
 
