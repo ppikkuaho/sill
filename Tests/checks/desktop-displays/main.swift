@@ -7,7 +7,9 @@
 // main display, else the first; none with none listed) and a pick that went being forgotten; which
 // display a device asks for (the one last picked there for that Mac, across connections and per
 // Mac, else the Mac's main display; a display that comes back asked for again; nothing for a Mac
-// from before kind 40), against this Mac's own three displays and Sill's virtual one.
+// from before kind 40); the Desktop button's tap (on the Desktop, back to the display before the
+// last switch; over a window, the display last shown), against this Mac's own three displays and
+// Sill's virtual one.
 import Foundation
 
 setvbuf(stdout, nil, _IOLBF, 0)
@@ -87,6 +89,55 @@ eq(DesktopDisplayMemory.wanted(remembered: 0xFFFF_FFFF, listed: [DisplayInfo(id:
 memory.remember(0xFFFF_FFFF, for: "Edge")
 eq(memory.remembered(for: "Edge"), 0xFFFF_FFFF, "remembered: the largest display ID kept whole")
 eq(DesktopDisplayMemory.key(for: "Mac mini"), "Sill.desktopDisplay.Mac mini", "the defaults key, per Mac by name")
+
+// MARK: The Desktop button's tap
+
+// Pietari's iPad, 2026-10-16: on the Desktop of the built-in display, a long press picks the DELL; a
+// tap goes back to the built-in display, and the next tap to the DELL.
+let tap = DesktopDisplayMemory(defaults: defaults)
+let pro = "Peeta's MacBook Pro"
+tap.pick(1, for: pro, showing: 3, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 1, "pick: the display picked")
+tap.pick(3, for: pro, showing: 1, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 3, "pick: the DELL")
+tap.tapped(for: pro, showing: 3, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 1, "tap on the Desktop: back to the display before the pick")
+tap.tapped(for: pro, showing: 1, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 3, "tap again: back to the DELL")
+eq(tap.previous(for: pro), 1, "previous: the display the last switch left")
+// Over a window the tap shows the Desktop on the display it was last on, and changes nothing.
+tap.tapped(for: pro, showing: nil, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 3, "tap over a window: the display last shown")
+eq(tap.previous(for: pro), 1, "tap over a window: the one before kept")
+// A long press from a window: what it replaces is the display the Desktop was last on.
+tap.pick(7, for: pro, showing: nil, listed: listed)
+eq(tap.previous(for: pro), 3, "pick over a window: the display it replaces is the one last shown")
+tap.tapped(for: pro, showing: 7, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 3, "tap after a pick from a window: back to the display before")
+// The first pick on a Mac replaces its main display, which the tap goes back to.
+let first = "Mac Studio"
+tap.pick(1, for: first, showing: nil, listed: listed)
+eq(tap.previous(for: first), 3, "first pick: it replaces the main display")
+tap.tapped(for: first, showing: 1, listed: listed)
+eq(tap.wanted(for: first, listed: listed), 3, "tap after the first pick: the main display")
+// Picking the display on screen again keeps the one before.
+tap.pick(3, for: first, showing: 3, listed: listed)
+eq(tap.previous(for: first), 1, "pick of the display on screen: the one before kept")
+// The display before gone: a tap on the Desktop leaves it where it is.
+tap.pick(1, for: pro, showing: 3, listed: listed)
+tap.tapped(for: pro, showing: 1, listed: DesktopDisplays.listed([builtIn, phone], main: 1))
+eq(tap.wanted(for: pro, listed: listed), 1, "tap with the display before gone: the Desktop stays")
+// Another device moved the shared Desktop off this device's pick: the tap goes back to the pick.
+tap.pick(3, for: pro, showing: 1, listed: listed)
+tap.tapped(for: pro, showing: 7, listed: listed)
+eq(tap.wanted(for: pro, listed: listed), 3, "tap with another device's display on screen: this device's pick")
+// One display, or a Mac before kind 40: nothing to go back to.
+let solo = "Mac mini 2"
+tap.tapped(for: solo, showing: 3, listed: DesktopDisplays.listed([dell], main: 3))
+eq(tap.remembered(for: solo), nil, "tap with one display: nothing picked")
+tap.tapped(for: solo, showing: 3, listed: [])
+eq(tap.remembered(for: solo), nil, "tap on a Mac before kind 40: nothing picked")
+eq(DesktopDisplayMemory.previousKey(for: "Mac mini"), "Sill.desktopDisplayBefore.Mac mini", "the tap's defaults key, per Mac by name")
 
 try? FileManager.default.removeItem(atPath: suite + ".plist")
 print(failures == 0 ? "desktop-displays: every check passed" : "desktop-displays: \(failures) FAILED")

@@ -485,7 +485,7 @@ struct PortraitStreamScreen: View {
     private func desktopButton(width: CGFloat? = nil) -> some View {
         barButton(open: client.active == .desktop, symbol: "desktopcomputer", label: "Desktop", width: width,
                   accessibilityLabel: "Show the full Mac desktop",
-                  action: { client.select(.desktop) })
+                  action: { client.tapDesktop() })
             .modifier(DesktopDisplayMenu(client: client))
     }
 
