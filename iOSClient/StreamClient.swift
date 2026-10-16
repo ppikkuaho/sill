@@ -3175,9 +3175,19 @@ final class StreamClient: ObservableObject {
     /// The Desktop button's long press: the Desktop on this display, remembered for this Mac.
     func pickDesktopDisplay(_ id: UInt32) {
         guard hostDisplays.contains(where: { $0.id == id }) else { return }
-        displayMemory.remember(id, for: macName)
+        displayMemory.pick(id, for: macName, showing: desktopOnScreen, listed: hostDisplays)
         select(.desktop)
     }
+
+    /// The Desktop button's tap: the Desktop on the display it was last on, or, while the Desktop
+    /// shows, on the one before the last switch (DesktopDisplayMemory's `tapped`).
+    func tapDesktop() {
+        displayMemory.tapped(for: macName, showing: desktopOnScreen, listed: hostDisplays)
+        select(.desktop)
+    }
+
+    /// The display the Desktop shows on this device's screen now; nil while a window streams.
+    private var desktopOnScreen: UInt32? { active == .desktop ? desktopDisplay : nil }
 
     /// The bar's long-press menu: close, minimize or full-screen a window on the Mac.
     func command(_ action: WindowCommand.Action, window id: UInt32) {

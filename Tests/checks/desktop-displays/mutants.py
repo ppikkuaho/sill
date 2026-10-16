@@ -19,6 +19,11 @@ MUTANTS = [
     ("DM3 never remembered", DEVICE, "defaults.set(Int64(display), forKey: Self.key(for: mac))", "_ = display"),
     ("DM4 one memory for every Mac", DEVICE, '"Sill.desktopDisplay." + mac', '"Sill.desktopDisplay"'),
     ("DM5 the remembered display ignored", DEVICE, "Self.wanted(remembered: remembered(for: mac), listed: listed)", "Self.wanted(remembered: nil, listed: listed)"),
+    ("DM6 the tap asks for the remembered display (the bug of 2026-10-16)", DEVICE, "if let other { pick(other, for: mac, showing: showing, listed: listed) }", "_ = other"),
+    ("DM7 the display a pick replaces never kept", DEVICE, "defaults.set(Int64(was), forKey: Self.previousKey(for: mac))", "_ = was"),
+    ("DM8 the tap over a window goes back too", DEVICE, "guard let showing else { return }", "let showing = showing ?? remembered(for: mac) ?? 0"),
+    ("DM9 the display before asked for though it is gone", DEVICE, ".first { id in id != showing && listed.contains { $0.id == id } }", ".first { id in id != showing }"),
+    ("DM10 a pick of the display on screen forgets the one before", DEVICE, "if let was = showing ?? wanted(for: mac, listed: listed), was != display {", "if let was = showing ?? wanted(for: mac, listed: listed) {"),
 ]
 caught = 0
 for name, rel, old, new in MUTANTS:

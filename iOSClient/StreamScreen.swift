@@ -1113,7 +1113,7 @@ private struct TopBar: View {
 
             button(open: client.active == .desktop, symbol: "desktopcomputer", label: "Desktop",
                    accessibilityLabel: "Show the full Mac desktop",
-                   action: { client.select(.desktop) })
+                   action: { client.tapDesktop() })
                 .modifier(DesktopDisplayMenu(client: client))
                 .opacity(scaleOpen ? 0 : 1)
                 .allowsHitTesting(!scaleOpen)
@@ -1171,7 +1171,7 @@ enum Spotlight {
 /// The Desktop button's long press: the Mac's displays by name, the one its Desktop shows marked;
 /// picking one shows the Desktop there and is remembered for that Mac (StreamClient's
 /// `pickDesktopDisplay`). Only for a Mac that lists more than one display; a tap stays the
-/// button's own.
+/// button's own (`tapDesktop`: on the Desktop, back to the display before the last switch).
 struct DesktopDisplayMenu: ViewModifier {
     @ObservedObject var client: StreamClient
 
